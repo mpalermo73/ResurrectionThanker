@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: Resurrection Thanker
+## Notes: Thanks healers when they resurrect you. Configure in Interface > AddOns.
+## Author: Your Name
+## Version: 1.1.1
+## IconTexture: Interface\AddOns\ResurrectionThanker\ResurrectionThanker
+## SavedVariables: ResurrectionThankerDB
+
+ResurrectionThanker.lua

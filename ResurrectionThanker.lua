@@ -90,7 +90,7 @@ local function ShowPopup(rezzerName)
 	msg:SetPoint("TOP", title, "BOTTOM", 0, -15)
 	msg:SetText("You were resurrected by " .. rezzerName .. "!")
 
-	local btn = CreateFrame("Button", nil, f, "GameMenuButtonTemplate")
+	local btn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
 	btn:SetSize(100, 24)
 	btn:SetPoint("BOTTOM", 0, 12)
 	btn:SetText("Thank!")
@@ -167,50 +167,67 @@ local function CreateSettingsPanel()
 	end)
 	y = y - 40
 
-	-- ── Message selector (cycling button) ────────────────
+	-- ── Message list (radio buttons + editable text) ─────
 	local msgLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	msgLabel:SetPoint("TOPLEFT", 20, y)
-	msgLabel:SetText("Thank-You Message:")
+	msgLabel:SetText("Thank-You Messages (select one, edit text as needed):")
+	y = y - 22
 
-	local msgBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	msgBtn:SetSize(100, 24)
-	msgBtn:SetPoint("LEFT", msgLabel, "RIGHT", 10, 0)
-	msgBtn:SetText("Next >>")
+	local msgRadios = {}
+	local msgEditBoxes = {}
 
-	local msgPreview = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	msgPreview:SetPoint("TOPLEFT", msgLabel, "BOTTOMLEFT", 10, -6)
-	msgPreview:SetWidth(450)
-	msgPreview:SetJustifyH("LEFT")
+	local function RefreshMsgRadios()
+		for i, radio in ipairs(msgRadios) do
+			radio:SetChecked(i == db.autoMessage)
+		end
+	end
 
-	msgBtn:SetScript("OnClick", function()
-		db.autoMessage = (db.autoMessage % #db.messages) + 1
-		msgPreview:SetText("#" .. db.autoMessage .. ": " .. FormatMessage(db.autoMessage, "Healer"))
-	end)
-	y = y - 55
+	for i = 1, #db.messages do
+		local radio = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+		radio:SetPoint("TOPLEFT", 30, y)
+		radio:SetScript("OnClick", function()
+			db.autoMessage = i
+			RefreshMsgRadios()
+		end)
+		msgRadios[i] = radio
 
-	-- ── Popup timeout (cycling button) ───────────────────
+		local editBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+		editBox:SetPoint("LEFT", radio, "RIGHT", 8, 0)
+		editBox:SetSize(400, 20)
+		editBox:SetAutoFocus(false)
+		editBox:SetScript("OnEnterPressed", function(self)
+			db.messages[i] = self:GetText()
+			self:ClearFocus()
+		end)
+		editBox:SetScript("OnEscapePressed", function(self)
+			self:SetText(db.messages[i])
+			self:ClearFocus()
+		end)
+		msgEditBoxes[i] = editBox
+
+		y = y - 28
+	end
+	y = y - 10
+
+	-- ── Popup timeout (dropdown) ─────────────────────────
 	local timeoutValues = { 5, 10, 15, 20, 30, 45, 60 }
 
 	local timeoutLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	timeoutLabel:SetPoint("TOPLEFT", 20, y)
 	timeoutLabel:SetText("Popup Timeout:")
 
-	local timeoutBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	timeoutBtn:SetSize(80, 24)
-	timeoutBtn:SetPoint("LEFT", timeoutLabel, "RIGHT", 10, 0)
-	timeoutBtn:SetScript("OnClick", function(self)
-		local idx = 1
-		for i, v in ipairs(timeoutValues) do
-			if v == db.popupTimeout then idx = i; break end
+	local timeoutDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+	timeoutDropdown:SetPoint("LEFT", timeoutLabel, "RIGHT", 10, 0)
+	timeoutDropdown:SetWidth(150)
+	timeoutDropdown:SetupMenu(function(dropdown, rootDescription)
+		for _, val in ipairs(timeoutValues) do
+			rootDescription:CreateRadio(
+				val .. " seconds",
+				function() return db.popupTimeout == val end,
+				function() db.popupTimeout = val end
+			)
 		end
-		idx = (idx % #timeoutValues) + 1
-		db.popupTimeout = timeoutValues[idx]
-		self:SetText(db.popupTimeout .. "s")
 	end)
-
-	local timeoutHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	timeoutHint:SetPoint("LEFT", timeoutBtn, "RIGHT", 8, 0)
-	timeoutHint:SetText("(click to cycle)")
 	y = y - 45
 
 	-- ── Simulate button ──────────────────────────────────
@@ -237,8 +254,10 @@ local function CreateSettingsPanel()
 	panel:SetScript("OnShow", function()
 		autoReplyCheck:SetChecked(db.autoReply)
 		testModeCheck:SetChecked(db.testMode)
-		msgPreview:SetText("#" .. db.autoMessage .. ": " .. FormatMessage(db.autoMessage, "Healer"))
-		timeoutBtn:SetText(db.popupTimeout .. "s")
+		RefreshMsgRadios()
+		for i, editBox in ipairs(msgEditBoxes) do
+			editBox:SetText(db.messages[i] or "")
+		end
 	end)
 
 	-- Register with modern Settings API (10.0+)
@@ -324,7 +343,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		local loadedAddon = ...
 		if loadedAddon == ADDON_NAME then
 			InitDB()
-			CreateSettingsPanel()
+			C_Timer.After(0, CreateSettingsPanel)
 
 			SLASH_REZTHANKER1 = "/rzt"
 			SLASH_REZTHANKER2 = "/rezthanker"

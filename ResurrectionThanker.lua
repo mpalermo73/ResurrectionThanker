@@ -135,7 +135,7 @@ local function CreateSettingsPanel()
 	local y = -70
 
 	-- ── Auto Reply checkbox ──────────────────────────────
-	local autoReplyCheck = CreateFrame("CheckButton", ADDON_NAME .. "AutoReply", panel, "UICheckButtonTemplate")
+	local autoReplyCheck = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
 	autoReplyCheck:SetPoint("TOPLEFT", 20, y)
 	local autoReplyLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	autoReplyLabel:SetPoint("LEFT", autoReplyCheck, "RIGHT", 4, 0)
@@ -144,7 +144,7 @@ local function CreateSettingsPanel()
 	y = y - 32
 
 	-- ── Test Mode checkbox ───────────────────────────────
-	local testModeCheck = CreateFrame("CheckButton", ADDON_NAME .. "TestMode", panel, "UICheckButtonTemplate")
+	local testModeCheck = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
 	testModeCheck:SetPoint("TOPLEFT", 20, y)
 	local testModeLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	testModeLabel:SetPoint("LEFT", testModeCheck, "RIGHT", 4, 0)
@@ -339,8 +339,11 @@ end
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_ALIVE")
 eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+
+local settingsCreated = false
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
@@ -357,8 +360,15 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
 	elseif event == "PLAYER_LOGIN" then
 		playerGUID = UnitGUID("player")
-		CreateSettingsPanel()
-		print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
+
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		if not settingsCreated then
+			settingsCreated = true
+			C_Timer.After(0, function()
+				CreateSettingsPanel()
+				print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
+			end)
+		end
 
 	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =

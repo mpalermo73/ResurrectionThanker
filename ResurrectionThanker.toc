@@ -2,19 +2,8 @@
 ## Title: Resurrection Thanker
 ## Notes: Thanks healers when they resurrect you. Configure in Interface > AddOns.
 ## Author: Your Name
-## Version: 1.0
-## IconTexture: Interface\AddOns\ResurrectionThanker\ResurrectionThanker
+## Version: 2.0
+## IconTexture: Interface\Icons\Spell_Holy_Resurrection
 ## SavedVariables: ResurrectionThankerDB
-
-Libs\LibStub\LibStub.lua
-Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
-Libs\AceAddon-3.0\AceAddon-3.0.lua
-Libs\AceConsole-3.0\AceConsole-3.0.lua
-Libs\AceEvent-3.0\AceEvent-3.0.lua
-Libs\AceConfig-3.0\AceConfig-3.0.lua
-Libs\AceConfigRegistry-3.0\AceConfigRegistry-3.0.lua
-Libs\AceConfigDialog-3.0\AceConfigDialog-3.0.lua
-Libs\AceDB-3.0\AceDB-3.0.lua
-Libs\AceDBOptions-3.0\AceDBOptions-3.0.lua
 
 ResurrectionThanker.lua

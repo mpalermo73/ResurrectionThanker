@@ -72,6 +72,10 @@ end
 
 local function ShowPopup(rezzerName)
 	if not rezzerName or rezzerName == "" then return end
+	if InCombatLockdown() then
+		print("|cff00ccff[RezThanker]|r Can't show popup in combat. " .. rezzerName .. " resurrected you!")
+		return
+	end
 
 	local f = CreateFrame("Frame", ADDON_NAME .. "Popup", UIParent, "BasicFrameTemplateWithInset")
 	f:SetSize(320, 160)
@@ -343,18 +347,18 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 		local loadedAddon = ...
 		if loadedAddon == ADDON_NAME then
 			InitDB()
-			C_Timer.After(0, CreateSettingsPanel)
 
 			SLASH_REZTHANKER1 = "/rzt"
 			SLASH_REZTHANKER2 = "/rezthanker"
 			SlashCmdList["REZTHANKER"] = SlashHandler
 
-			print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
 			self:UnregisterEvent("ADDON_LOADED")
 		end
 
 	elseif event == "PLAYER_LOGIN" then
 		playerGUID = UnitGUID("player")
+		CreateSettingsPanel()
+		print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
 
 	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =

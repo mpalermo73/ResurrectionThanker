@@ -3,7 +3,7 @@
 ## Notes: Thanks healers when they resurrect you. Configure in Interface > AddOns.
 ## Author: Your Name
 ## Version: 2.0
-## IconTexture: Interface\Icons\Spell_Holy_Resurrection
+## IconTexture: Interface\Icons\thumbup
 ## SavedVariables: ResurrectionThankerDB
 
 ResurrectionThanker.lua

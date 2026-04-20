@@ -148,27 +148,23 @@ local function CreateSettingsPanel()
 	testModeCheck:SetScript("OnClick", function(self) db.testMode = self:GetChecked() end)
 	y = y - 40
 
-	-- ── Channel selector (cycling button) ────────────────
+	-- ── Channel selector (dropdown) ──────────────────────
 	local channelLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	channelLabel:SetPoint("TOPLEFT", 20, y)
 	channelLabel:SetText("Chat Channel:")
 
-	local channelBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	channelBtn:SetSize(100, 24)
-	channelBtn:SetPoint("LEFT", channelLabel, "RIGHT", 10, 0)
-	channelBtn:SetScript("OnClick", function(self)
-		local idx = 1
-		for i, k in ipairs(CHANNEL_ORDER) do
-			if k == db.channel then idx = i; break end
+	local channelDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+	channelDropdown:SetPoint("LEFT", channelLabel, "RIGHT", 10, 0)
+	channelDropdown:SetWidth(150)
+	channelDropdown:SetupMenu(function(dropdown, rootDescription)
+		for _, key in ipairs(CHANNEL_ORDER) do
+			rootDescription:CreateRadio(
+				CHANNEL_LABELS[key],
+				function() return db.channel == key end,
+				function() db.channel = key end
+			)
 		end
-		idx = (idx % #CHANNEL_ORDER) + 1
-		db.channel = CHANNEL_ORDER[idx]
-		self:SetText(CHANNEL_LABELS[db.channel])
 	end)
-
-	local channelHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	channelHint:SetPoint("LEFT", channelBtn, "RIGHT", 8, 0)
-	channelHint:SetText("(click to cycle)")
 	y = y - 40
 
 	-- ── Message selector (cycling button) ────────────────
@@ -241,7 +237,6 @@ local function CreateSettingsPanel()
 	panel:SetScript("OnShow", function()
 		autoReplyCheck:SetChecked(db.autoReply)
 		testModeCheck:SetChecked(db.testMode)
-		channelBtn:SetText(CHANNEL_LABELS[db.channel])
 		msgPreview:SetText("#" .. db.autoMessage .. ": " .. FormatMessage(db.autoMessage, "Healer"))
 		timeoutBtn:SetText(db.popupTimeout .. "s")
 	end)
@@ -335,7 +330,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 			SLASH_REZTHANKER2 = "/rezthanker"
 			SlashCmdList["REZTHANKER"] = SlashHandler
 
-			print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded — type |cffFFD700/rzt|r to open settings")
+			print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
 			self:UnregisterEvent("ADDON_LOADED")
 		end
 

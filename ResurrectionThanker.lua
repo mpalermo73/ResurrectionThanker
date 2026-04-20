@@ -1,72 +1,306 @@
 -- ============================================================
---  ResurrectionThanker  v1.2
+--  ResurrectionThanker  v1.3
 --  Thanks healers when they resurrect you.
 --
---  Interface -> AddOns shows a stub with a launch button.
---  The real config is our own taint-free frame (/rzt to open).
+--  Settings in Interface > AddOns > Resurrection Thanker
+--  Or type /rzt to open settings
 -- ============================================================
 
 local ADDON_NAME = "ResurrectionThanker"
+local db
 
--- ── Defaults ──────────────────────────────────────────────────
-local defaults = {
-    autoReply    = false,
-    autoMessage  = 1,
-    channel      = "SAY",
-    popupTimeout = 20,
-    messages = {
-        "Thanks for the rez, %s!",
-        "Appreciate the resurrection, %s!",
-        "Back from the dead thanks to %s!",
-        "Couldn't have made it without you, %s! Thank you!",
-        "bless u %s <3",
-    },
+-- ── Resurrection spell IDs ────────────────────────────────────
+local RES_SPELLS = {
+	[2006]   = true,  -- Resurrection (Priest)
+	[61999]  = true,  -- Raise Ally (Death Knight)
+	[20484]  = true,  -- Rebirth (Druid)
+	[391054] = true,  -- Revive (Druid, out-of-combat)
+	[7328]   = true,  -- Redemption (Paladin)
+	[391270] = true,  -- Ancestral Spirit (Shaman)
+	[212056] = true,  -- Soulstone Resurrection (Warlock)
+	[115178] = true,  -- Resuscitate (Monk)
+	[361227] = true,  -- Return (Evoker)
+	[50769]  = true,  -- Revive (non-combat generic)
+	[8342]   = true,  -- Defibrillate
 }
 
--- ── SavedVariables ────────────────────────────────────────────
-local db
-local function InitDB()
-    if not ResurrectionThankerDB then
-        ResurrectionThankerDB = CopyTable(defaults)
-    end
-    db = ResurrectionThankerDB
-    for k, v in pairs(defaults) do
-        if db[k] == nil then db[k] = v end
-    end
-    if not db.messages then db.messages = CopyTable(defaults.messages) end
-end
-
--- ── Runtime state ─────────────────────────────────────────────
-local lastRezzer    = nil
-local popupFrame    = nil
-local configFrame   = nil
-local playerGUID    = nil
+-- ── Runtime state ────────────────────────────────────────────
+local lastRezzer = nil
 local pendingRezzer = nil
+local playerGUID = nil
 
-local function GetPlayerGUID()
-    if not playerGUID then playerGUID = UnitGUID("player") end
-    return playerGUID
-end
+-- ── Settings defaults ────────────────────────────────────────
+local defaults = {
+	profile = {
+		autoReply = false,
+		autoMessage = 1,
+		channel = "SAY",
+		popupTimeout = 20,
+		testMode = false,
+		messages = {
+			"Thanks for the rez, %s!",
+			"Appreciate the resurrection, %s!",
+			"Back from the dead thanks to %s!",
+			"Couldn't have made it without you, %s! Thank you!",
+			"bless u %s <3",
+		},
+	},
+}
 
+-- ── Ace options table ────────────────────────────────────────
+local options = {
+	name = "Resurrection Thanker",
+	type = "group",
+	args = {
+		autoReply = {
+			name = "Auto Reply",
+			desc = "Automatically thank healers when resurrected",
+			type = "toggle",
+			set = function(info, val) db.autoReply = val end,
+			get = function(info) return db.autoReply end,
+			order = 1,
+		},
+		autoMessage = {
+			name = "Auto Message",
+			desc = "Which message to send when auto-replying",
+			type = "select",
+			values = {
+				[1] = "Thanks for the rez, %s!",
+				[2] = "Appreciate the resurrection, %s!",
+				[3] = "Back from the dead thanks to %s!",
+				[4] = "Couldn't have made it without you, %s! Thank you!",
+				[5] = "bless u %s <3",
+			},
+			set = function(info, val) db.autoMessage = val end,
+			get = function(info) return db.autoMessage end,
+			order = 2,
+		},
+		channel = {
+			name = "Chat Channel",
+			desc = "Which chat channel to send thank you messages",
+			type = "select",
+			values = {
+				SAY = "Say",
+				PARTY = "Party",
+				RAID = "Raid",
+				WHISPER = "Whisper",
+			},
+			set = function(info, val) db.channel = val end,
+			get = function(info) return db.channel end,
+			order = 3,
+		},
+		popupTimeout = {
+			name = "Popup Timeout",
+			desc = "How long to show the popup (seconds)",
+			type = "range",
+			min = 1,
+			max = 60,
+			step = 1,
+			set = function(info, val) db.popupTimeout = val end,
+			get = function(info) return db.popupTimeout end,
+			order = 4,
+		},
+		testMode = {
+			name = "Test Mode",
+			desc = "Send actual messages during testing instead of just logging",
+			type = "toggle",
+			set = function(info, val) db.testMode = val end,
+			get = function(info) return db.testMode end,
+			order = 5,
+		},
+		test = {
+			name = "Simulate Resurrection",
+			desc = "Test the addon by simulating a resurrection",
+			type = "execute",
+			func = function()
+				lastRezzer = "TestHealer"
+				if db.autoReply then
+					if db.testMode then
+						SendThankYou(FormatMessage(db.autoMessage, "TestHealer"))
+					else
+						print("|cff00ccff[RezThanker]|r (TEST) Would send: " ..
+							FormatMessage(db.autoMessage, "TestHealer") .. " via " .. db.channel)
+					end
+				else
+					ShowPopup("TestHealer")
+				end
+			end,
+			order = 6,
+		},
+	},
+}
+
+
+-- ── Helper functions ────────────────────────────────────────
 local function FormatMessage(index, name)
-    local msg = db.messages[index] or db.messages[1]
-    return msg:format(name or "healer")
+	local msg = db.messages[index] or db.messages[1]
+	return msg:format(name or "healer")
 end
 
 local function SendThankYou(text)
-    if not text or text == "" then return end
-    local ch = db.channel
-    if     ch == "WHISPER" and lastRezzer  then SendChatMessage(text, "WHISPER", nil, lastRezzer)
-    elseif ch == "RAID"    and IsInRaid()  then SendChatMessage(text, "RAID")
-    elseif ch == "PARTY"   and IsInGroup() then SendChatMessage(text, "PARTY")
-    else                                        SendChatMessage(text, "SAY")
-    end
+	if not text or text == "" then return end
+	local ch = db.channel
+	if ch == "WHISPER" and lastRezzer then
+		SendChatMessage(text, "WHISPER", nil, lastRezzer)
+	elseif ch == "RAID" and IsInRaid() then
+		SendChatMessage(text, "RAID")
+	elseif ch == "PARTY" and IsInGroup() then
+		SendChatMessage(text, "PARTY")
+	else
+		SendChatMessage(text, "SAY")
+	end
 end
 
--- ── Forward declare so popup can call it ──────────────────────
-local ShowConfig
+local function ShowPopup(rezzerName)
+	if not rezzerName or rezzerName == "" then return end
 
--- ── Rez thank-you popup ───────────────────────────────────────
+	local f = CreateFrame("Frame", ADDON_NAME .. "Popup", UIParent, "BasicFrameTemplateWithInset")
+	f:SetSize(320, 160)
+	f:SetPoint("CENTER")
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", f.StartMoving)
+	f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+	local title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	title:SetPoint("TOP", 0, -15)
+	title:SetText("Resurrection Thanker")
+
+	local msg = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	msg:SetPoint("TOP", title, "BOTTOM", 0, -15)
+	msg:SetText("You were resurrected by " .. rezzerName .. "!")
+
+	local btn = CreateFrame("Button", nil, f, "GameMenuButtonTemplate")
+	btn:SetSize(100, 24)
+	btn:SetPoint("BOTTOM", 0, 12)
+	btn:SetText("Thank!")
+	btn:SetScript("OnClick", function()
+		SendThankYou(FormatMessage(db.autoMessage, rezzerName))
+		f:Hide()
+	end)
+
+	f:Show()
+
+	if db.popupTimeout > 0 then
+		C_Timer.After(db.popupTimeout, function()
+			if f and f:IsShown() then f:Hide() end
+		end)
+	end
+end
+
+-- ── Ace addon initialization ─────────────────────────────────
+ResurrectionThanker = LibStub("AceAddon-3.0"):NewAddon(ADDON_NAME, "AceConsole-3.0", "AceEvent-3.0")
+local ResurrectionThanker = ResurrectionThanker
+
+function ResurrectionThanker:OnInitialize()
+	-- Initialize database
+	db = LibStub("AceDB-3.0"):New("ResurrectionThankerDB", defaults).profile
+
+	-- Register with Ace
+	LibStub("AceConfig-3.0"):RegisterOptionsTable(ADDON_NAME, options)
+	LibStub("AceConfigDialog-3.0"):AddToBlizOptions(ADDON_NAME, "Resurrection Thanker")
+
+	-- Register slash commands
+	self:RegisterChatCommand("rzt", "SlashCommand")
+	self:RegisterChatCommand("rezthanker", "SlashCommand")
+
+	print("|cff00ccff[Resurrection Thanker]|r v1.3 loaded — type |cffFFD700/rzt|r to open settings")
+end
+
+function ResurrectionThanker:OnEnable()
+	-- Register for events
+	self:RegisterEvent("PLAYER_LOGIN")
+	self:RegisterEvent("PLAYER_ALIVE")
+	self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+
+	-- Cache player GUID
+	playerGUID = UnitGUID("player")
+end
+
+function ResurrectionThanker:PLAYER_LOGIN()
+	-- Refresh player GUID on login
+	playerGUID = UnitGUID("player")
+end
+
+function ResurrectionThanker:COMBAT_LOG_EVENT_UNFILTERED()
+	local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =
+		CombatLogGetCurrentEventInfo()
+
+	-- Check if this is a resurrection event on us
+	if (subEvent == "SPELL_CAST_SUCCESS" or subEvent == "SPELL_RESURRECT")
+		and destGUID == playerGUID
+		and (RES_SPELLS[spellID] or subEvent == "SPELL_RESURRECT")
+	then
+		pendingRezzer = sourceName
+	end
+end
+
+function ResurrectionThanker:PLAYER_ALIVE()
+	local rezzer = pendingRezzer or lastRezzer
+	pendingRezzer = nil
+	if not rezzer then return end
+
+	lastRezzer = rezzer
+
+	if db.autoReply then
+		-- Send thank you automatically
+		C_Timer.After(1.5, function()
+			SendThankYou(FormatMessage(db.autoMessage, rezzer))
+		end)
+	else
+		-- Show popup to let player choose
+		C_Timer.After(1.0, function()
+			ShowPopup(rezzer)
+		end)
+	end
+end
+
+function ResurrectionThanker:SlashCommand(input)
+	input = (input or ""):lower():trim()
+
+	if input == "" or input == "config" or input == "options" then
+		LibStub("AceConfigDialog-3.0"):Open(ADDON_NAME)
+		return
+	end
+
+	if input == "help" then
+		print("|cff00ccff[RezThanker]|r Slash commands:")
+		print("  |cffFFD700/rzt|r [command]  — Open/control the addon")
+		print("  |cffFFD700/rzt config|r — Open settings panel")
+		print("  |cffFFD700/rzt test|r — Simulate a resurrection")
+		print("  |cffFFD700/rzt status|r — Show current settings")
+		return
+	end
+
+	if input == "test" then
+		lastRezzer = "TestHealer"
+		if db.autoReply then
+			if db.testMode then
+				SendThankYou(FormatMessage(db.autoMessage, "TestHealer"))
+				print("|cff00ccff[RezThanker]|r Sent test message: " .. FormatMessage(db.autoMessage, "TestHealer"))
+			else
+				print("|cff00ccff[RezThanker]|r (TEST MODE OFF) Would send: " ..
+					FormatMessage(db.autoMessage, "TestHealer") .. " via " .. db.channel)
+			end
+		else
+			ShowPopup("TestHealer")
+		end
+		return
+	end
+
+	if input == "status" then
+		print("|cff00ccff[RezThanker]|r Current settings:")
+		print("  Auto-reply: " .. (db.autoReply and "|cff00ff00ON|r" or "|cffff4444OFF|r"))
+		print("  Channel: " .. db.channel)
+		print("  Popup timeout: " .. db.popupTimeout .. "s")
+		print("  Auto-message: #" .. db.autoMessage .. " — " .. FormatMessage(db.autoMessage, "Healer"))
+		print("  Test mode: " .. (db.testMode and "|cff00ff00ON|r" or "|cffff4444OFF|r"))
+		return
+	end
+
+	print("|cff00ccff[RezThanker]|r Unknown command: |cffFFD700" .. input .. "|r — try |cffFFD700/rzt help|r")
+end
 local BUTTON_COUNT = 5
 
 local function BuildPopup()
@@ -300,7 +534,18 @@ local function BuildConfig()
         timeValFS:SetText(val .. "s")
     end)
     f._timeSlider = timeSlider
-    yOff = yOff - 44
+
+    local testModeCB = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    testModeCB:SetPoint("TOPLEFT", f, "TOPLEFT", 18, yOff)
+    testModeCB:SetChecked(db.testMode)
+    testModeCB:SetScript("OnClick", function(self) db.testMode = self:GetChecked() end)
+    local testModeLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    testModeLabel:SetPoint("LEFT", testModeCB, "RIGHT", 4, 0)
+    testModeLabel:SetText("Full test mode: send the configured message when auto-reply is enabled")
+    f._testModeCB = testModeCB
+    yOff = yOff - 30
+
+    yOff = yOff - 14
 
     -- ── Section: Messages ─────────────────────────────────────
     SectionLabel("Messages")
@@ -355,8 +600,12 @@ local function BuildConfig()
     testBtn:SetScript("OnClick", function()
         lastRezzer = "TestHealer"
         if db.autoReply then
-            print("|cff00ccff[RezThanker]|r (TEST) Would send: " ..
-                  FormatMessage(db.autoMessage, "TestHealer"))
+            if db.testMode then
+                SendThankYou(FormatMessage(db.autoMessage, "TestHealer"))
+            else
+                print("|cff00ccff[RezThanker]|r (TEST) Would send: " ..
+                      FormatMessage(db.autoMessage, "TestHealer") .. " via " .. db.channel)
+            end
         else
             ShowPopup("TestHealer")
         end
@@ -397,6 +646,9 @@ local function BuildConfig()
         for i, eb in ipairs(f._messageBoxes) do
             eb:SetText(db.messages[i] or "")
         end
+        if f._testModeCB then
+            f._testModeCB:SetChecked(db.testMode)
+        end
     end)
 
     f:Hide()
@@ -414,48 +666,44 @@ ShowConfig = function()
     end
 end
 
--- ── Native Settings stub ──────────────────────────────────────
---  Bare-minimum canvas: just a description and a launch button.
---  No dropdowns, no sliders, nothing that can taint.
 local function BuildSettingsStub()
-    local canvas = CreateFrame("Frame", "ResurrectionThankerSettingsStub")
-    canvas:SetSize(700, 200)
+    if not Settings then return end
 
-    local icon = canvas:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(48, 48)
-    icon:SetPoint("TOPLEFT", canvas, "TOPLEFT", 16, -16)
-    icon:SetTexture("Interface\\AddOns\\ResurrectionThanker\\ResurrectionThanker")
+    local category = Settings.RegisterVerticalLayoutCategory("Resurrection Thanker")
 
-    local titleFS = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-    titleFS:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 0)
-    titleFS:SetText("Resurrection Thanker")
-
-    local descFS = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    descFS:SetPoint("TOPLEFT", titleFS, "BOTTOMLEFT", 0, -6)
-    descFS:SetText("Automatically thanks healers when they resurrect you.")
-    descFS:SetTextColor(0.8, 0.8, 0.8)
-
-    local openBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-    openBtn:SetSize(220, 28)
-    openBtn:SetPoint("TOPLEFT", canvas, "TOPLEFT", 16, -90)
-    openBtn:SetText("Open Resurrection Thanker Settings")
-    openBtn:SetScript("OnClick", function()
-        HideUIPanel(SettingsPanel)   -- close the native panel first
-        ShowConfig()
-    end)
-
-    local hintFS = canvas:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    hintFS:SetPoint("LEFT", openBtn, "RIGHT", 10, 0)
-    hintFS:SetText("or type  |cffFFD700/rzt|r  in chat")
-    hintFS:SetTextColor(0.6, 0.6, 0.6)
-
-    local ok, cat = pcall(function()
-        return Settings.RegisterCanvasLayoutCategory(canvas, "Resurrection Thanker")
-    end)
-    if ok and cat then
-        Settings.RegisterAddOnCategory(cat)
+    -- Auto Reply Checkbox
+    do
+        local setting = Settings.RegisterAddOnSetting(category, "autoReply", "autoReply", db, "boolean", "Auto Reply", "Automatically thank healers when resurrected")
+        Settings.CreateCheckbox(category, setting, "Enable Auto Reply")
     end
+
+    -- Channel Dropdown
+    do
+        local options = {
+            { label = "Say", value = "SAY" },
+            { label = "Party", value = "PARTY" },
+            { label = "Raid", value = "RAID" },
+            { label = "Whisper", value = "WHISPER" },
+        }
+        local setting = Settings.RegisterAddOnSetting(category, "channel", "channel", db, "string", "Channel", "Channel to send thank you messages")
+        Settings.CreateDropdown(category, setting, options, "Channel")
+    end
+
+    -- Test Mode Checkbox
+    do
+        local setting = Settings.RegisterAddOnSetting(category, "testMode", "testMode", db, "boolean", "Test Mode", "Send messages in test mode without actual resurrection")
+        Settings.CreateCheckbox(category, setting, "Enable Test Mode")
+    end
+
+    -- Popup Timeout Slider
+    do
+        local setting = Settings.RegisterAddOnSetting(category, "popupTimeout", "popupTimeout", db, "number", "Popup Timeout", "How long to show the popup (seconds)")
+        Settings.CreateSlider(category, setting, 1, 10, 1, "Popup Timeout")
+    end
+
+    Settings.RegisterAddOnCategory(category)
 end
+
 
 -- ── Spell IDs ─────────────────────────────────────────────────
 local RES_SPELLS = {
@@ -472,127 +720,5 @@ local RES_SPELLS = {
     [8342]   = true,  -- Defibrillate
 }
 
--- ── Event frame ───────────────────────────────────────────────
-local eventFrame = CreateFrame("Frame", ADDON_NAME .. "EventFrame")
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("PLAYER_ALIVE")
-eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-
-eventFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
-        if (...) ~= ADDON_NAME then return end
-        InitDB()
-        playerGUID = UnitGUID("player")
-        BuildSettingsStub()
-
-        SLASH_REZTHANKER1 = "/rezthanker"
-        SLASH_REZTHANKER2 = "/rzt"
-        SlashCmdList["REZTHANKER"] = SlashHandler
-
-        print("|cff00ccff[Resurrection Thanker]|r loaded — type |cffFFD700/rzt|r to configure.")
-
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =
-            CombatLogGetCurrentEventInfo()
-        if (subEvent == "SPELL_CAST_SUCCESS" or subEvent == "SPELL_RESURRECT")
-            and destGUID == GetPlayerGUID()
-            and (RES_SPELLS[spellID] or subEvent == "SPELL_RESURRECT")
-        then
-            pendingRezzer = sourceName
-        end
-
-    elseif event == "PLAYER_ALIVE" then
-        local rezzer = pendingRezzer or lastRezzer
-        pendingRezzer = nil
-        if not rezzer then return end
-
-        lastRezzer = rezzer
-        if db.autoReply then
-            C_Timer.After(1.5, function()
-                SendThankYou(FormatMessage(db.autoMessage, rezzer))
-            end)
-        else
-            C_Timer.After(1.0, function()
-                ShowPopup(rezzer)
-            end)
-        end
-    end
-end)
-
--- ── Slash commands ────────────────────────────────────────────
-function SlashHandler(input)
-    input = (input or ""):lower():trim()
-
-    if input == "" or input == "config" or input == "options" then
-        ShowConfig()
-        return
-    end
-
-    if input == "help" then
-        print("|cff00ccff[RezThanker]|r  /rzt [command]")
-        print("  (none)         Open settings")
-        print("  auto on|off    Toggle auto-reply")
-        print("  channel <say|party|raid|whisper>")
-        print("  timeout <5-60>")
-        print("  automsg <1-5>  Set auto-reply message index")
-        print("  test           Simulate a rez from 'TestHealer'")
-        print("  status         Print current settings")
-        return
-    end
-
-    local cmd, arg = input:match("^(%S+)%s*(.*)")
-    cmd = cmd or ""
-    arg = arg or ""
-
-    if cmd == "auto" then
-        if     arg == "on"  then db.autoReply = true;  print("[RezThanker] Auto-reply |cff00ff00ON|r")
-        elseif arg == "off" then db.autoReply = false; print("[RezThanker] Auto-reply |cffff4444OFF|r")
-        end
-
-    elseif cmd == "channel" then
-        local ch = arg:upper()
-        if ch == "SAY" or ch == "PARTY" or ch == "RAID" or ch == "WHISPER" then
-            db.channel = ch
-            print("[RezThanker] Channel: " .. ch)
-        else
-            print("[RezThanker] Valid channels: say, party, raid, whisper")
-        end
-
-    elseif cmd == "timeout" then
-        local s = tonumber(arg)
-        if s and s >= 5 and s <= 60 then
-            db.popupTimeout = s
-            print("[RezThanker] Popup timeout: " .. s .. "s")
-        else
-            print("[RezThanker] Timeout must be between 5 and 60.")
-        end
-
-    elseif cmd == "automsg" then
-        local idx = tonumber(arg)
-        if idx and idx >= 1 and idx <= #db.messages then
-            db.autoMessage = idx
-            print("[RezThanker] Auto-reply message set to #" .. idx)
-        else
-            print("[RezThanker] Valid range: 1–" .. #db.messages)
-        end
-
-    elseif cmd == "test" then
-        lastRezzer = "TestHealer"
-        if db.autoReply then
-            print("|cff00ccff[RezThanker]|r (TEST) Would send: " ..
-                  FormatMessage(db.autoMessage, "TestHealer"))
-        else
-            ShowPopup("TestHealer")
-        end
-
-    elseif cmd == "status" then
-        print("|cff00ccff[RezThanker] Status:|r")
-        print("  Auto-reply : " .. (db.autoReply and "|cff00ff00ON|r" or "|cffff4444OFF|r"))
-        print("  Channel    : " .. db.channel)
-        print("  Timeout    : " .. db.popupTimeout .. "s")
-        print("  Auto msg   : #" .. db.autoMessage .. " — " .. (db.messages[db.autoMessage] or "?"))
-
-    else
-        print("[RezThanker] Unknown command: '" .. cmd .. "'. Try /rzt help.")
-    end
-end
+-- ── Spell list ────────────────────────────────────────────────
+-- ── Spell list ────────────────────────────────────────────────

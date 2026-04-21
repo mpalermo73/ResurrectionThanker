@@ -58,6 +58,18 @@ end
 
 local function SendThankYou(text)
 	if not text or text == "" then return end
+	-- Defend against ElvUI taint by checking combat lockdown
+	if InCombatLockdown() then
+		-- Delay the message until combat ends
+		C_Timer.After(0.5, function()
+			if not InCombatLockdown() then
+				SendThankYou(text)  -- Retry recursively
+			else
+				C_Timer.After(1, function() SendThankYou(text) end)  -- Try again in 1s
+			end
+		end)
+		return
+	end
 	local ch = db.channel
 	if ch == "WHISPER" and lastRezzer then
 		SendChatMessage(text, "WHISPER", nil, lastRezzer)
@@ -73,7 +85,14 @@ end
 local function ShowPopup(rezzerName)
 	if not rezzerName or rezzerName == "" then return end
 	if InCombatLockdown() then
-		print("|cff00ccff[RezThanker]|r Can't show popup in combat. " .. rezzerName .. " resurrected you!")
+		-- Defer popup creation until combat ends
+		C_Timer.After(0.5, function()
+			if not InCombatLockdown() then
+				ShowPopup(rezzerName)  -- Retry recursively
+			else
+				C_Timer.After(1, function() ShowPopup(rezzerName) end)  -- Try again in 1s
+			end
+		end)
 		return
 	end
 
@@ -114,6 +133,9 @@ end
 
 -- ── Open settings helper ─────────────────────────────────────
 local function OpenSettings()
+	if not settingsCategory then
+		CreateSettingsPanel()
+	end
 	if settingsCategory then
 		Settings.OpenToCategory(settingsCategory:GetID())
 	end
@@ -360,15 +382,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
 	elseif event == "PLAYER_LOGIN" then
 		playerGUID = UnitGUID("player")
-
-	elseif event == "PLAYER_ENTERING_WORLD" then
 		if not settingsCreated then
 			settingsCreated = true
-			C_Timer.After(0, function()
-				CreateSettingsPanel()
-				print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
-			end)
+			print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
 		end
+
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- Just a placeholder event handler
 
 	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =

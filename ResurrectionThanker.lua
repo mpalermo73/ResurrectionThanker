@@ -131,16 +131,6 @@ local function ShowPopup(rezzerName)
 	end
 end
 
--- ── Open settings helper ─────────────────────────────────────
-local function OpenSettings()
-	if not settingsCategory then
-		CreateSettingsPanel()
-	end
-	if settingsCategory then
-		Settings.OpenToCategory(settingsCategory:GetID())
-	end
-end
-
 -- ── Settings panel (modern Settings API) ─────────────────────
 local function CreateSettingsPanel()
 	local panel = CreateFrame("Frame", ADDON_NAME .. "Options")
@@ -291,6 +281,16 @@ local function CreateSettingsPanel()
 	Settings.RegisterAddOnCategory(settingsCategory)
 end
 
+-- ── Open settings helper (must be defined AFTER CreateSettingsPanel) ──
+local function OpenSettings()
+	if not settingsCategory then
+		CreateSettingsPanel()
+	end
+	if settingsCategory then
+		Settings.OpenToCategory(settingsCategory:GetID())
+	end
+end
+
 -- ── SavedVariables initialization ────────────────────────────
 local function InitDB()
 	if not ResurrectionThankerDB then
@@ -361,11 +361,8 @@ end
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_ALIVE")
 eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-
-local settingsCreated = false
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
@@ -382,13 +379,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
 	elseif event == "PLAYER_LOGIN" then
 		playerGUID = UnitGUID("player")
-		if not settingsCreated then
-			settingsCreated = true
-			print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded - type |cffFFD700/rzt|r to open settings")
-		end
-
-	elseif event == "PLAYER_ENTERING_WORLD" then
-		-- Just a placeholder event handler
+		CreateSettingsPanel()
+		print("|cff00ccff[Resurrection Thanker]|r v2.0 loaded — type |cffFFD700/rzt|r to open settings")
 
 	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local _, subEvent, _, _, sourceName, _, _, destGUID, _, _, _, spellID =

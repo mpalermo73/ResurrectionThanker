@@ -1,14 +1,14 @@
 # Resurrection Thanker
 
-This addon is largely functional but still gives a "block" error so it can't work automatically yet.
+This addon thanks the player who resurrected you, either with a small confirmation popup or with an optional automatic chat message.
 
 ## Overview
 
-Resurrection Thanker is a World of Warcraft addon designed to automatically thank healers when they resurrect your character. It enhances gameplay by providing a polite and customizable way to express gratitude, fostering better community interactions in groups and raids.
+Resurrection Thanker is a World of Warcraft addon designed to thank the player who resurrected your character. It provides a polite and customizable way to express gratitude in groups and raids.
 
 ## How It Works
 
-The addon monitors the game's combat log for resurrection events targeting the player. When a resurrection spell is successfully cast on you, the addon triggers one of two response modes:
+The addon monitors party and raid spellcast events for resurrection spells targeting the player. When a resurrection completes, the addon triggers one of two response modes:
 
 ### Manual Mode (Default)
 
@@ -41,10 +41,6 @@ Access the configuration interface by:
 
 - `/rzt` or `/rzt config`: Open the configuration window
 - `/rzt help`: Display available commands
-- `/rzt auto on/off`: Toggle auto-reply
-- `/rzt channel <say/party/raid/whisper>`: Set chat channel
-- `/rzt timeout <5-60>`: Set popup timeout in seconds
-- `/rzt automsg <1-5>`: Set which message to use for auto-reply
 - `/rzt test`: Simulate a resurrection for testing
 - `/rzt status`: Display current settings
 
@@ -53,11 +49,11 @@ Access the configuration interface by:
 The addon recognizes the following resurrection spells:
 
 - Resurrection (Priest)
+- Ancestral Spirit (Shaman)
 - Raise Ally (Death Knight)
 - Rebirth (Druid)
 - Revive (Druid, out-of-combat)
 - Redemption (Paladin)
-- Ancestral Spirit (Shaman)
 - Soulstone Resurrection (Warlock)
 - Resuscitate (Monk)
 - Return (Evoker)
@@ -67,10 +63,9 @@ The addon recognizes the following resurrection spells:
 ## Technical Details
 
 - **Saved Variables**: Settings are stored in `ResurrectionThankerDB`
-- **Interface Version**: Compatible with WoW interface version 120001 (likely Dragonflight)
+- **Interface Version**: Uses the interface version in `ResurrectionThanker.toc`
 - **Addon Files**:
   - `ResurrectionThanker.lua`: Main addon code
   - `ResurrectionThanker.toc`: Addon metadata and file list
 
-The addon uses a taint-free custom UI to avoid conflicts with the game's interface, ensuring stability and compatibility.</content>
-<parameter name="filePath">/usr/local/palermo/GIT/ResurrectionThanker/README.md
+The addon uses Blizzard's modern Settings API for its configuration panel.

@@ -159,11 +159,8 @@ local function SendThankYou(text, target)
 end
 
 local function IsGroupUnit(unit)
-	if type(unit) ~= "string" then
-		return false
-	end
-
-	return unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$")
+	if unit == "player" then return true end
+	return UnitIsPlayer(unit) and (UnitInParty(unit) or UnitInRaid(unit))
 end
 
 local function GetUnitName(unit)
@@ -182,8 +179,15 @@ local function UnitTargetsPlayer(unit)
 	return UnitExists(unit .. "target") and UnitIsUnit(unit .. "target", "player")
 end
 
+local function IsResurrectionSpell(spellID)
+	for id in pairs(RESURRECTION_SPELLS) do
+		if id == spellID then return true end
+	end
+	return false
+end
+
 local function TrackResurrectionCast(unit, spellID)
-	if not IsGroupUnit(unit) or not RESURRECTION_SPELLS[spellID] or not UnitTargetsPlayer(unit) then
+	if not spellID or not IsGroupUnit(unit) or not IsResurrectionSpell(spellID) or not UnitTargetsPlayer(unit) then
 		return
 	end
 

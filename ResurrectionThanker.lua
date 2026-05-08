@@ -180,10 +180,10 @@ local function UnitTargetsPlayer(unit)
 end
 
 local function IsResurrectionSpell(spellID)
-	for id in pairs(RESURRECTION_SPELLS) do
-		if id == spellID then return true end
-	end
-	return false
+	-- spellID may be a "secret" tainted value; direct comparison and table indexing
+	-- both throw when tainted, so wrap in pcall and fail silently.
+	local ok, result = pcall(function() return RESURRECTION_SPELLS[spellID] ~= nil end)
+	return ok and result
 end
 
 local function TrackResurrectionCast(unit, spellID)
